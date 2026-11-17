@@ -46,14 +46,18 @@ function Signup() {
 
       const response = await signupUser(form);
 
-      localStorage.setItem("token", response.token);
+      if (!response.token || !response.user) {
+        throw new Error("Token or user not received from server");
+      }
 
-      alert(response.message);
+      localStorage.setItem("token", response.token);
+      localStorage.setItem("user", JSON.stringify(response.user));
 
       navigate("/chat");
     } catch (error) {
       setError(
         error.response?.data?.message ||
+        error.message ||
         "Signup failed. Please try again."
       );
     } finally {
@@ -79,7 +83,6 @@ function Signup() {
 
           <div className="form-group">
             <label>Full Name</label>
-
             <input
               type="text"
               name="name"
@@ -92,7 +95,6 @@ function Signup() {
 
           <div className="form-group">
             <label>Email Address</label>
-
             <input
               type="email"
               name="email"
@@ -105,7 +107,6 @@ function Signup() {
 
           <div className="form-group">
             <label>Phone Number</label>
-
             <input
               type="tel"
               name="phone"
@@ -119,7 +120,6 @@ function Signup() {
 
           <div className="form-group">
             <label>Password</label>
-
             <input
               type="password"
               name="password"
@@ -131,9 +131,7 @@ function Signup() {
             />
           </div>
 
-          {error && (
-            <p className="error">{error}</p>
-          )}
+          {error && <p className="error">{error}</p>}
 
           <button
             type="submit"
@@ -184,18 +182,19 @@ function Login() {
 
       const response = await loginUser(form);
 
+      if (!response.token || !response.user) {
+        throw new Error("Token or user not received from server");
+      }
+
       localStorage.setItem("token", response.token);
+      localStorage.setItem("user", JSON.stringify(response.user));
 
-      alert(response.message);
-
-      console.log("Logged in user:", response.user);
-
-      // Navigate to Chat Window
       navigate("/chat");
 
     } catch (error) {
       setError(
         error.response?.data?.message ||
+        error.message ||
         "Login failed. Please try again."
       );
     } finally {
@@ -221,7 +220,6 @@ function Login() {
 
           <div className="form-group">
             <label>Email or Phone Number</label>
-
             <input
               type="text"
               name="emailOrPhone"
@@ -234,7 +232,6 @@ function Login() {
 
           <div className="form-group">
             <label>Password</label>
-
             <input
               type="password"
               name="password"
@@ -245,9 +242,7 @@ function Login() {
             />
           </div>
 
-          {error && (
-            <p className="error">{error}</p>
-          )}
+          {error && <p className="error">{error}</p>}
 
           <button
             type="submit"
@@ -287,17 +282,11 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-
         <Route path="/" element={<Signup />} />
-
         <Route path="/signup" element={<Signup />} />
-
         <Route path="/login" element={<Login />} />
-
         <Route path="/chat" element={<ProtectedChat />} />
-
         <Route path="*" element={<Navigate to="/" replace />} />
-
       </Routes>
     </BrowserRouter>
   );

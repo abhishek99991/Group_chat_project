@@ -3,19 +3,19 @@ import axios from "axios";
 
 const API_URL = "http://localhost:5000/api/auth";
 
-export const signupUser = async (userData) => {
+export const signupUser = async (formData) => {
   const response = await axios.post(
     `${API_URL}/signup`,
-    userData
+    formData
   );
 
   return response.data;
 };
 
-export const loginUser = async (userData) => {
+export const loginUser = async (formData) => {
   const response = await axios.post(
     `${API_URL}/login`,
-    userData
+    formData
   );
 
   return response.data;
