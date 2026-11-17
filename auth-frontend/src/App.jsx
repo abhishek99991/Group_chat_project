@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { BrowserRouter, Routes, Route, Link, useNavigate } from "react-router-dom";
 import { FaWhatsapp } from "react-icons/fa";
 import "./App.css";
-
+import { signupUser, loginUser } from "./services/authService";
 function Signup() {
   const navigate = useNavigate();
 
@@ -20,33 +20,26 @@ function Signup() {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setError("");
 
-    if (!form.name || !form.email || !form.phone || !form.password) {
-      setError("Please fill in all fields.");
-      return;
-    }
+  try {
+    const response = await signupUser(form);
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-      setError("Please enter a valid email address.");
-      return;
-    }
+    localStorage.setItem("token", response.token);
 
-    if (!/^\d{10}$/.test(form.phone)) {
-      setError("Enter a valid 10-digit phone number.");
-      return;
-    }
-
-    if (form.password.length < 8) {
-      setError("Password must contain at least 8 characters.");
-      return;
-    }
-
-    setError("");
-    alert("Signup successful! (Frontend demo)");
+    alert(response.message);
     navigate("/login");
-  };
+  } catch (error) {
+    setError(
+      error.response?.data?.message ||
+      "Signup failed. Please try again."
+    );
+  }
+};
+
 
   return (
     <div className="auth-container">
@@ -130,17 +123,27 @@ function Login() {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setError("");
 
-    if (!form.emailOrPhone || !form.password) {
-      setError("Please enter email/phone and password.");
-      return;
-    }
+  try {
+    const response = await loginUser(form);
 
-    setError("");
-    alert("Login submitted! (Frontend demo)");
-  };
+    localStorage.setItem("token", response.token);
+
+    alert(response.message);
+
+    console.log("Logged in user:", response.user);
+  } catch (error) {
+    setError(
+      error.response?.data?.message ||
+      "Login failed. Please try again."
+    );
+  }
+};
+
 
   return (
     <div className="auth-container">
