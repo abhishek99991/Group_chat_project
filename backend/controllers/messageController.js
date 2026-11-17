@@ -1,7 +1,7 @@
 
 const Message = require("../models/Message");
 
-// SEND MESSAGE API
+// POST: Save a new message
 const sendMessage = async (req, res) => {
   try {
     const { message } = req.body;
@@ -28,6 +28,7 @@ const sendMessage = async (req, res) => {
       message: "Message sent successfully",
       data: savedMessage,
     });
+
   } catch (error) {
     console.error("Send message error:", error);
 
@@ -38,7 +39,7 @@ const sendMessage = async (req, res) => {
   }
 };
 
-// GET ALL MESSAGES API
+// GET: Fetch all messages from database
 const getMessages = async (req, res) => {
   try {
     const messages = await Message.find()
@@ -47,10 +48,12 @@ const getMessages = async (req, res) => {
 
     return res.status(200).json({
       success: true,
+      totalMessages: messages.length,
       data: messages,
     });
+
   } catch (error) {
-    console.error("Get messages error:", error);
+    console.error("Fetch messages error:", error);
 
     return res.status(500).json({
       success: false,

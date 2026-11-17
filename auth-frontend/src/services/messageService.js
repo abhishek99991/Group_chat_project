@@ -3,12 +3,11 @@ import axios from "axios";
 
 const API_URL = "http://localhost:5000/api/messages";
 
-// Get JWT token
 const getAuthConfig = () => {
   const token = localStorage.getItem("token");
 
   if (!token) {
-    throw new Error("Please login first. Token not found.");
+    throw new Error("Please login first");
   }
 
   return {
@@ -19,7 +18,7 @@ const getAuthConfig = () => {
   };
 };
 
-// Send message API
+// Send message
 export const sendMessage = async (message) => {
   const response = await axios.post(
     API_URL,
@@ -30,7 +29,7 @@ export const sendMessage = async (message) => {
   return response.data;
 };
 
-// Get all messages API
+// Fetch messages
 export const getMessages = async () => {
   const response = await axios.get(
     API_URL,

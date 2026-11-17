@@ -9,8 +9,10 @@ const {
 
 const authMiddleware = require("../middleware/authMiddleware");
 
-// Protected APIs
+// API to send message
 router.post("/", authMiddleware, sendMessage);
+
+// API to get all messages
 router.get("/", authMiddleware, getMessages);
 
 module.exports = router;
