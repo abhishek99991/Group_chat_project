@@ -1,7 +1,7 @@
 
 const Message = require("../models/Message");
 
-// POST: Save a new message
+// Send message
 const sendMessage = async (req, res) => {
   try {
     const { message } = req.body;
@@ -13,15 +13,21 @@ const sendMessage = async (req, res) => {
       });
     }
 
+    // Save message in MongoDB
     const newMessage = await Message.create({
       sender: req.user.userId,
       message: message.trim(),
     });
 
+    // Get sender details
     const savedMessage = await newMessage.populate(
       "sender",
       "name email"
     );
+
+    // Broadcast message to all connected users
+    const io = req.app.get("io");
+    io.emit("newMessage", savedMessage);
 
     return res.status(201).json({
       success: true,
@@ -39,7 +45,7 @@ const sendMessage = async (req, res) => {
   }
 };
 
-// GET: Fetch all messages from database
+// Get all messages
 const getMessages = async (req, res) => {
   try {
     const messages = await Message.find()
@@ -53,7 +59,7 @@ const getMessages = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Fetch messages error:", error);
+    console.error("Get messages error:", error);
 
     return res.status(500).json({
       success: false,

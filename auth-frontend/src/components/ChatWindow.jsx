@@ -1,5 +1,6 @@
 
 import React, { useEffect, useRef, useState } from "react";
+import { io } from "socket.io-client";
 
 import {
   sendMessage,
@@ -14,6 +15,7 @@ const ChatWindow = () => {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [socketStatus, setSocketStatus] = useState("Connecting...");
 
   const bottomRef = useRef(null);
 
@@ -21,16 +23,54 @@ const ChatWindow = () => {
     localStorage.getItem("user") || "null"
   );
 
-  // Fetch previous messages
+  // Add message only if it doesn't already exist
+  const addMessage = (newMessage) => {
+    setMessages((prevMessages) => {
+      const exists = prevMessages.some(
+        (msg) => String(msg._id) === String(newMessage._id)
+      );
+
+      if (exists) return prevMessages;
+
+      return [...prevMessages, newMessage].sort(
+        (a, b) =>
+          new Date(a.createdAt) - new Date(b.createdAt)
+      );
+    });
+  };
+
+  // Fetch previous messages from MongoDB
   useEffect(() => {
+    let active = true;
+
     const fetchMessages = async () => {
       try {
         const response = await getMessages();
 
-        setMessages(
-          Array.isArray(response.data) ? response.data : []
-        );
+        if (active) {
+          const oldMessages = Array.isArray(response.data)
+            ? response.data
+            : [];
 
+          setMessages((prevMessages) => {
+            const combined = [...oldMessages, ...prevMessages];
+
+            const uniqueMessages = Array.from(
+              new Map(
+                combined.map((msg) => [
+                  String(msg._id),
+                  msg,
+                ])
+              ).values()
+            );
+
+            return uniqueMessages.sort(
+              (a, b) =>
+                new Date(a.createdAt) -
+                new Date(b.createdAt)
+            );
+          });
+        }
       } catch (err) {
         if (err.response?.status === 401) {
           localStorage.removeItem("token");
@@ -39,20 +79,67 @@ const ChatWindow = () => {
           return;
         }
 
-        setError(
-          err.response?.data?.message ||
-          err.message ||
-          "Unable to load messages"
-        );
+        if (active) {
+          setError(
+            err.response?.data?.message ||
+            err.message ||
+            "Unable to load messages"
+          );
+        }
       } finally {
-        setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     };
 
     fetchMessages();
+
+    return () => {
+      active = false;
+    };
   }, []);
 
-  // Auto scroll to latest message
+  // Connect Socket.IO and receive live messages
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      setSocketStatus("Disconnected");
+      return;
+    }
+
+    const socket = io("http://localhost:5000", {
+      auth: {
+        token,
+      },
+    });
+
+    socket.on("connect", () => {
+      console.log("Socket connected:", socket.id);
+      setSocketStatus("Connected");
+    });
+
+    socket.on("newMessage", (newMessage) => {
+      console.log("New live message:", newMessage);
+      addMessage(newMessage);
+    });
+
+    socket.on("disconnect", () => {
+      setSocketStatus("Disconnected");
+    });
+
+    socket.on("connect_error", (err) => {
+      console.error("Socket error:", err.message);
+      setSocketStatus("Connection failed");
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
+
+  // Automatically scroll to latest message
   useEffect(() => {
     bottomRef.current?.scrollIntoView({
       behavior: "smooth",
@@ -66,36 +153,25 @@ const ChatWindow = () => {
     if (!message.trim() || sending) return;
 
     try {
-      setError("");
       setSending(true);
+      setError("");
 
       const response = await sendMessage(message.trim());
 
-      if (!response.success || !response.data) {
-        throw new Error(
-          response.message || "Message could not be saved"
-        );
+      // Socket also sends this message.
+      // addMessage prevents duplicates.
+      if (response.success && response.data) {
+        addMessage(response.data);
       }
-
-      setMessages((prev) => [
-        ...prev,
-        response.data,
-      ]);
 
       setMessage("");
 
     } catch (err) {
-      if (err.response?.status === 401) {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        window.location.href = "/login";
-        return;
-      }
+      console.error("Send message error:", err);
 
       setError(
         err.response?.data?.message ||
-        err.message ||
-        "Message could not be sent"
+        "Unable to send message"
       );
     } finally {
       setSending(false);
@@ -111,11 +187,17 @@ const ChatWindow = () => {
 
   // Format message time
   const formatTime = (date) => {
+    if (!date) return "";
+
     return new Date(date).toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
     });
   };
+
+  const currentUserId = String(
+    currentUser?.id || currentUser?._id || ""
+  );
 
   return (
     <div className="chat-container">
@@ -148,8 +230,9 @@ const ChatWindow = () => {
 
           <div>
             <h3>Group Chat</h3>
+
             <span className="online-status">
-              Chat Room
+              {socketStatus}
             </span>
           </div>
 
@@ -172,11 +255,7 @@ const ChatWindow = () => {
 
           {messages.map((msg) => {
             const senderId = String(
-              msg.sender?._id || msg.sender
-            );
-
-            const currentUserId = String(
-              currentUser?.id || currentUser?._id || ""
+              msg.sender?._id || msg.sender || ""
             );
 
             const isMyMessage =
