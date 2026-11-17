@@ -1,12 +1,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
-
-import {
-  sendMessage,
-  getMessages,
-} from "../services/messageService";
-
+import { getMessages } from "../services/messageService";
 import "./ChatWindow.css";
 
 const ChatWindow = () => {
@@ -17,14 +12,21 @@ const ChatWindow = () => {
   const [error, setError] = useState("");
   const [socketStatus, setSocketStatus] = useState("Connecting...");
 
+  const socketRef = useRef(null);
   const bottomRef = useRef(null);
 
   const currentUser = JSON.parse(
     localStorage.getItem("user") || "null"
   );
 
-  // Add message only if it doesn't already exist
+  const currentUserId = String(
+    currentUser?.id || currentUser?._id || ""
+  );
+
+  // Add message without duplicates
   const addMessage = (newMessage) => {
+    if (!newMessage?._id) return;
+
     setMessages((prevMessages) => {
       const exists = prevMessages.some(
         (msg) => String(msg._id) === String(newMessage._id)
@@ -47,31 +49,29 @@ const ChatWindow = () => {
       try {
         const response = await getMessages();
 
-        if (active) {
-          const oldMessages = Array.isArray(response.data)
-            ? response.data
-            : [];
+        if (!active) return;
 
-          setMessages((prevMessages) => {
-            const combined = [...oldMessages, ...prevMessages];
+        const oldMessages = Array.isArray(response.data)
+          ? response.data
+          : [];
 
-            const uniqueMessages = Array.from(
-              new Map(
-                combined.map((msg) => [
-                  String(msg._id),
-                  msg,
-                ])
-              ).values()
-            );
+        setMessages((prevMessages) => {
+          const combined = [...oldMessages, ...prevMessages];
 
-            return uniqueMessages.sort(
-              (a, b) =>
-                new Date(a.createdAt) -
-                new Date(b.createdAt)
-            );
-          });
-        }
+          const uniqueMessages = Array.from(
+            new Map(
+              combined.map((msg) => [String(msg._id), msg])
+            ).values()
+          );
+
+          return uniqueMessages.sort(
+            (a, b) =>
+              new Date(a.createdAt) - new Date(b.createdAt)
+          );
+        });
       } catch (err) {
+        console.error("Fetch messages error:", err);
+
         if (err.response?.status === 401) {
           localStorage.removeItem("token");
           localStorage.removeItem("user");
@@ -82,8 +82,7 @@ const ChatWindow = () => {
         if (active) {
           setError(
             err.response?.data?.message ||
-            err.message ||
-            "Unable to load messages"
+              "Unable to load messages"
           );
         }
       } finally {
@@ -100,55 +99,55 @@ const ChatWindow = () => {
     };
   }, []);
 
-  // Connect Socket.IO and receive live messages
- 
-useEffect(() => {
-  const token = localStorage.getItem("token");
+  // Socket.IO connection
+  useEffect(() => {
+    const token = localStorage.getItem("token");
 
-  if (!token) {
-    console.log("Please login first");
-    return;
-  }
+    if (!token) {
+      setSocketStatus("Disconnected");
+      return;
+    }
 
-  // Connect frontend to Socket.IO backend
-  const socket = io("http://localhost:3000", {
-    auth: {
-      token: token,
-    },
-  });
-
-  // Connection successful
-  socket.on("connect", () => {
-    console.log("Socket connected:", socket.id);
-  });
-
-  // Receive messages from other users
-  socket.on("newMessage", (newMessage) => {
-    console.log("New message received:", newMessage);
-
-    setMessages((prevMessages) => {
-      const alreadyExists = prevMessages.some(
-        (msg) => msg._id === newMessage._id
-      );
-
-      if (alreadyExists) {
-        return prevMessages;
-      }
-
-      return [...prevMessages, newMessage];
+    const socket = io("http://localhost:3000", {
+      auth: {
+        token: token,
+      },
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
     });
-  });
 
-  // Connection error
-  socket.on("connect_error", (error) => {
-    console.error("Socket connection error:", error.message);
-  });
+    socketRef.current = socket;
 
-  // Disconnect when component is removed
-  return () => {
-    socket.disconnect();
-  };
-}, []);
+    // Connected
+    socket.on("connect", () => {
+      console.log("Socket connected:", socket.id);
+      setSocketStatus("Connected");
+    });
+
+    // Receive new messages
+    socket.on("newMessage", (newMessage) => {
+      console.log("New message received:", newMessage);
+      addMessage(newMessage);
+    });
+
+    // Disconnected
+    socket.on("disconnect", (reason) => {
+      console.log("Socket disconnected:", reason);
+      setSocketStatus("Disconnected");
+    });
+
+    // Connection error
+    socket.on("connect_error", (err) => {
+      console.error("Socket connection error:", err.message);
+      setSocketStatus("Connection failed");
+    });
+
+    return () => {
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, []);
 
   // Automatically scroll to latest message
   useEffect(() => {
@@ -157,42 +156,65 @@ useEffect(() => {
     });
   }, [messages]);
 
-  // Send message
-  const handleSend = async (e) => {
+  // Send message using Socket.IO
+  const handleSend = (e) => {
     e.preventDefault();
 
-    if (!message.trim() || sending) return;
+    const messageText = message.trim();
 
-    try {
-      setSending(true);
-      setError("");
+    if (!messageText || sending) return;
 
-      const response = await sendMessage(message.trim());
+    const socket = socketRef.current;
 
-      // Socket also sends this message.
-      // addMessage prevents duplicates.
-      if (response.success && response.data) {
-        addMessage(response.data);
-      }
-
-      setMessage("");
-
-    } catch (err) {
-      console.error("Send message error:", err);
-
-      setError(
-        err.response?.data?.message ||
-        "Unable to send message"
-      );
-    } finally {
-      setSending(false);
+    if (!socket || !socket.connected) {
+      setError("Socket is not connected. Please try again.");
+      return;
     }
+
+    setSending(true);
+    setError("");
+
+    console.log("Sending message:", messageText);
+
+    // Emit message to backend
+    socket.timeout(5000).emit(
+      "sendMessage",
+      { message: messageText },
+      (err, response) => {
+        setSending(false);
+
+        if (err) {
+          console.error("Socket acknowledgement timeout:", err);
+          setError("Server did not respond. Please try again.");
+          return;
+        }
+
+        console.log("Server response:", response);
+
+        if (response?.success) {
+          setMessage("");
+
+          // Add returned message as a fallback.
+          // The newMessage event may already have added it.
+          if (response.data) {
+            addMessage(response.data);
+          }
+        } else {
+          setError(
+            response?.message || "Message sending failed"
+          );
+        }
+      }
+    );
   };
 
   // Logout
   const handleLogout = () => {
+    socketRef.current?.disconnect();
+
     localStorage.removeItem("token");
     localStorage.removeItem("user");
+
     window.location.href = "/login";
   };
 
@@ -206,19 +228,17 @@ useEffect(() => {
     });
   };
 
-  const currentUserId = String(
-    currentUser?.id || currentUser?._id || ""
-  );
-
   return (
     <div className="chat-container">
 
       {/* Sidebar */}
       <aside className="chat-sidebar">
-
         <div className="sidebar-header">
           <h2>Messages</h2>
-          <button onClick={handleLogout}>Logout</button>
+
+          <button onClick={handleLogout}>
+            Logout
+          </button>
         </div>
 
         <div className="contact active-contact">
@@ -229,14 +249,13 @@ useEffect(() => {
             <p>Welcome to the group!</p>
           </div>
         </div>
-
       </aside>
 
-      {/* Chat Area */}
+      {/* Chat section */}
       <main className="chat-main">
 
+        {/* Header */}
         <header className="chat-header">
-
           <div className="avatar">G</div>
 
           <div>
@@ -246,13 +265,14 @@ useEffect(() => {
               {socketStatus}
             </span>
           </div>
-
         </header>
 
         {/* Messages */}
         <section className="messages-area">
 
-          {loading && <p>Loading messages...</p>}
+          {loading && (
+            <p>Loading messages...</p>
+          )}
 
           {error && (
             <p className="error">{error}</p>
@@ -279,7 +299,6 @@ useEffect(() => {
                   isMyMessage ? "me" : "other"
                 }`}
               >
-
                 <div className="message-bubble">
 
                   {!isMyMessage && (
@@ -295,21 +314,18 @@ useEffect(() => {
                   </span>
 
                 </div>
-
               </div>
             );
           })}
 
           <div ref={bottomRef}></div>
-
         </section>
 
-        {/* Message Input */}
+        {/* Message input */}
         <form
           className="message-form"
           onSubmit={handleSend}
         >
-
           <input
             type="text"
             placeholder="Type a message..."
@@ -320,15 +336,17 @@ useEffect(() => {
 
           <button
             type="submit"
-            disabled={sending || !message.trim()}
+            disabled={
+              sending ||
+              !message.trim() ||
+              socketStatus !== "Connected"
+            }
           >
             {sending ? "Sending..." : "Send ➤"}
           </button>
-
         </form>
 
       </main>
-
     </div>
   );
 };

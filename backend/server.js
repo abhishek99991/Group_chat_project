@@ -5,7 +5,7 @@ const cors = require("cors");
 const http = require("http");
 const { Server } = require("socket.io");
 const jwt = require("jsonwebtoken");
-
+const Message = require("./models/Message");
 require("dotenv").config();
 
 const authRoutes = require("./routes/authRoutes");
@@ -49,13 +49,61 @@ io.use((socket, next) => {
 });
 
 // Handle connections
+
+
 io.on("connection", (socket) => {
   console.log("User connected:", socket.userId);
+
+  socket.on("sendMessage", async (data, callback) => {
+    try {
+      console.log("Message received:", data);
+
+      if (!data.message || !data.message.trim()) {
+        return callback({
+          success: false,
+          message: "Message cannot be empty",
+        });
+      }
+
+      // Save message in MongoDB
+      const newMessage = await Message.create({
+        sender: socket.userId,
+        message: data.message.trim(),
+      });
+
+      // Populate sender details
+      const savedMessage = await newMessage.populate(
+        "sender",
+        "name email"
+      );
+
+      // Broadcast to all connected users
+      io.emit("newMessage", savedMessage);
+
+      console.log("Message broadcast successfully");
+
+      // Send acknowledgement to frontend
+      callback({
+        success: true,
+        data: savedMessage,
+      });
+
+    } catch (error) {
+      console.error("Socket message error:", error);
+
+      callback({
+        success: false,
+        message: "Failed to save message",
+      });
+    }
+  });
 
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.userId);
   });
 });
+
+
 
 // Make Socket.IO available inside controllers
 app.set("io", io);
