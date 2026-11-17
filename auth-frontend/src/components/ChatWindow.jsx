@@ -101,43 +101,54 @@ const ChatWindow = () => {
   }, []);
 
   // Connect Socket.IO and receive live messages
-  useEffect(() => {
-    const token = localStorage.getItem("token");
+ 
+useEffect(() => {
+  const token = localStorage.getItem("token");
 
-    if (!token) {
-      setSocketStatus("Disconnected");
-      return;
-    }
+  if (!token) {
+    console.log("Please login first");
+    return;
+  }
 
-    const socket = io("http://localhost:5000", {
-      auth: {
-        token,
-      },
+  // Connect frontend to Socket.IO backend
+  const socket = io("http://localhost:3000", {
+    auth: {
+      token: token,
+    },
+  });
+
+  // Connection successful
+  socket.on("connect", () => {
+    console.log("Socket connected:", socket.id);
+  });
+
+  // Receive messages from other users
+  socket.on("newMessage", (newMessage) => {
+    console.log("New message received:", newMessage);
+
+    setMessages((prevMessages) => {
+      const alreadyExists = prevMessages.some(
+        (msg) => msg._id === newMessage._id
+      );
+
+      if (alreadyExists) {
+        return prevMessages;
+      }
+
+      return [...prevMessages, newMessage];
     });
+  });
 
-    socket.on("connect", () => {
-      console.log("Socket connected:", socket.id);
-      setSocketStatus("Connected");
-    });
+  // Connection error
+  socket.on("connect_error", (error) => {
+    console.error("Socket connection error:", error.message);
+  });
 
-    socket.on("newMessage", (newMessage) => {
-      console.log("New live message:", newMessage);
-      addMessage(newMessage);
-    });
-
-    socket.on("disconnect", () => {
-      setSocketStatus("Disconnected");
-    });
-
-    socket.on("connect_error", (err) => {
-      console.error("Socket error:", err.message);
-      setSocketStatus("Connection failed");
-    });
-
-    return () => {
-      socket.disconnect();
-    };
-  }, []);
+  // Disconnect when component is removed
+  return () => {
+    socket.disconnect();
+  };
+}, []);
 
   // Automatically scroll to latest message
   useEffect(() => {

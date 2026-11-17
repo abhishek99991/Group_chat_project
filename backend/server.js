@@ -60,7 +60,7 @@ io.on("connection", (socket) => {
 // Make Socket.IO available inside controllers
 app.set("io", io);
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3000;
 
 const startServer = async () => {
   try {

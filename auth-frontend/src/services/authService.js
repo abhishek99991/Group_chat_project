@@ -1,7 +1,7 @@
 
 import axios from "axios";
 
-const API_URL = "http://localhost:5000/api/auth";
+const API_URL = "http://localhost:3000/api/auth";
 
 export const signupUser = async (formData) => {
   const response = await axios.post(

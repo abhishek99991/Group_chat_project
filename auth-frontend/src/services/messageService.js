@@ -1,7 +1,7 @@
 
 import axios from "axios";
 
-const API_URL = "http://localhost:5000/api/messages";
+const API_URL = "http://localhost:3000/api/messages";
 
 const getAuthConfig = () => {
   const token = localStorage.getItem("token");
@@ -18,7 +18,6 @@ const getAuthConfig = () => {
   };
 };
 
-// Send message
 export const sendMessage = async (message) => {
   const response = await axios.post(
     API_URL,
@@ -29,7 +28,6 @@ export const sendMessage = async (message) => {
   return response.data;
 };
 
-// Fetch messages
 export const getMessages = async () => {
   const response = await axios.get(
     API_URL,
