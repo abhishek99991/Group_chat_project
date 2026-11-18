@@ -5,8 +5,7 @@ const cors = require("cors");
 const http = require("http");
 require("dotenv").config();
 const mediaRoutes = require("./routes/mediaRoutes");
-const startArchiveJob = require("./cron/archiveMessages");
-
+const { startArchiveJob } = require("./cron/archiveMessages");const aiRoutes = require("./routes/aiRoutes");
 const authRoutes = require("./routes/authRoutes");
 const messageRoutes = require("./routes/messageRoutes");
 const initSocket = require("./socket-io");
@@ -22,6 +21,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/media", mediaRoutes);
+app.use("/api/ai", aiRoutes);
 
 // Initialize Socket.IO
 const io = initSocket(server);
