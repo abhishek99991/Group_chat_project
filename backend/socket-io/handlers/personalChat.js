@@ -2,7 +2,7 @@
 const personalChatHandler = (io, socket) => {
   const userId = String(socket.data.userId);
 
-  // Join a private room with another user
+  // Join personal room
   socket.on("join_room", (data, callback) => {
     try {
       const recipientId = String(data?.recipientId || "");
@@ -14,17 +14,16 @@ const personalChatHandler = (io, socket) => {
         });
       }
 
-      // Both users get the same room ID
       const roomId = [userId, recipientId].sort().join("_");
 
       socket.join(roomId);
 
-      console.log(`${userId} joined personal room: ${roomId}`);
+      console.log("User joined room:", roomId);
 
       callback?.({
         success: true,
         roomId,
-        message: "Joined personal chat successfully",
+        message: "Joined room successfully",
       });
     } catch (error) {
       console.error("Join room error:", error);
@@ -36,8 +35,10 @@ const personalChatHandler = (io, socket) => {
     }
   });
 
-  // Send a personal message
+  // Send personal message
   socket.on("new_message", (data, callback) => {
+    console.log("New personal message event received:", data);
+
     try {
       const recipientId = String(data?.recipientId || "");
       const message = data?.message;
@@ -58,11 +59,10 @@ const personalChatHandler = (io, socket) => {
 
       const roomId = [userId, recipientId].sort().join("_");
 
-      // Make sure the sender has joined this room
       if (!socket.rooms.has(roomId)) {
         return callback?.({
           success: false,
-          message: "Please join the personal chat first",
+          message: "Please join the personal room first",
         });
       }
 
@@ -73,20 +73,27 @@ const personalChatHandler = (io, socket) => {
         createdAt: new Date(),
       };
 
-      // Send only to users in this private room
       io.to(roomId).emit("personal_message", messageData);
 
-      callback?.({
-        success: true,
-        message: "Personal message sent",
-      });
+      console.log("Personal message sent to room:", roomId);
+
+      // Important: respond to frontend
+      if (typeof callback === "function") {
+        callback({
+          success: true,
+          message: "Personal message sent successfully",
+          data: messageData,
+        });
+      }
     } catch (error) {
       console.error("Personal message error:", error);
 
-      callback?.({
-        success: false,
-        message: "Failed to send personal message",
-      });
+      if (typeof callback === "function") {
+        callback({
+          success: false,
+          message: "Failed to send personal message",
+        });
+      }
     }
   });
 };
