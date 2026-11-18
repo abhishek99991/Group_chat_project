@@ -4,6 +4,7 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const http = require("http");
 require("dotenv").config();
+const mediaRoutes = require("./routes/mediaRoutes");
 
 const authRoutes = require("./routes/authRoutes");
 const messageRoutes = require("./routes/messageRoutes");
@@ -19,6 +20,7 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/media", mediaRoutes);
 
 // Initialize Socket.IO
 const io = initSocket(server);
