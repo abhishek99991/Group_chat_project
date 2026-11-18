@@ -3,7 +3,7 @@ const { Server } = require("socket.io");
 
 const socketAuth = require("./middleware");
 const chatHandler = require("./handlers/chat");
-
+const personalChatHandler = require("./handlers/personalChat");
 const initSocket = (server) => {
   const io = new Server(server, {
     cors: {
@@ -16,18 +16,20 @@ const initSocket = (server) => {
   io.use(socketAuth);
 
   io.on("connection", (socket) => {
-    const userId = socket.data.userId;
+  const userId = socket.data.userId;
 
-    console.log("User connected:", userId);
+  console.log("User connected:", userId);
 
-    // Register chat events
-    chatHandler(io, socket);
+  // Existing group chat handler
+  chatHandler(io, socket);
 
-    socket.on("disconnect", () => {
-      console.log("User disconnected:", userId);
-    });
+  // New personal chat handler
+  personalChatHandler(io, socket);
+
+  socket.on("disconnect", () => {
+    console.log("User disconnected:", userId);
   });
-
+});
   return io;
 };
 
