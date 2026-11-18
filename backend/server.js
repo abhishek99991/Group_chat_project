@@ -8,7 +8,7 @@ require("dotenv").config();
 const authRoutes = require("./routes/authRoutes");
 const messageRoutes = require("./routes/messageRoutes");
 const initSocket = require("./socket-io");
-
+const userRoutes = require("./routes/userRoutes");
 const app = express();
 const server = http.createServer(app);
 
@@ -18,6 +18,7 @@ app.use(express.json());
 // REST API routes
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
+app.use("/api/users", userRoutes);
 
 // Initialize Socket.IO
 const io = initSocket(server);

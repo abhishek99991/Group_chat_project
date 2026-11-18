@@ -2,17 +2,21 @@
 import React, { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import { getMessages } from "../services/messageService";
+import generateRoomId from "../utils/roomUtils";
 import "./ChatWindow.css";
 
 const ChatWindow = () => {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [personalMessages, setPersonalMessages] = useState([]);
-  const [selectedUserId, setSelectedUserId] = useState("");
-  const [chatMode, setChatMode] = useState("group");
 
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [selectedUser, setSelectedUser] = useState(null);
+
+  const [chatMode, setChatMode] = useState("group");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState("");
   const [socketStatus, setSocketStatus] = useState("Connecting...");
 
@@ -156,8 +160,79 @@ const ChatWindow = () => {
     };
   }, []);
 
+  // Verify email using backend API
+  const verifyRecipientEmail = async () => {
+    const email = recipientEmail.trim().toLowerCase();
+
+    if (!email) {
+      setError("Please enter an email address");
+      return;
+    }
+
+    if (email === currentUser?.email?.toLowerCase()) {
+      setError("You cannot start a chat with yourself");
+      return;
+    }
+
+    try {
+      setVerifying(true);
+      setError("");
+      setSelectedUser(null);
+
+      const token = localStorage.getItem("token");
+
+      const response = await fetch(
+        `http://localhost:3000/api/users/by-email?email=${encodeURIComponent(email)}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || data.success === false) {
+        throw new Error(
+          data.message || "User not found"
+        );
+      }
+
+      // Supports either { user: {...} } or { data: {...} }
+      const recipient =
+        data.user || data.data?.user || data.data;
+
+      if (!recipient?._id && !recipient?.id) {
+        throw new Error("User details were not returned by the API");
+      }
+
+      const recipientId = String(
+        recipient._id || recipient.id
+      );
+
+      if (recipientId === currentUserId) {
+        throw new Error("You cannot chat with yourself");
+      }
+
+      setSelectedUser({
+        ...recipient,
+        _id: recipientId,
+        email: recipient.email || email,
+      });
+
+      console.log("Verified recipient:", recipient);
+    } catch (err) {
+      console.error("Email verification error:", err);
+      setError(err.message || "Unable to verify email");
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   // Join personal room
-  const joinPersonalRoom = (recipientId) => {
+  const joinPersonalRoom = () => {
     const socket = socketRef.current;
 
     if (!socket || !socket.connected) {
@@ -165,40 +240,72 @@ const ChatWindow = () => {
       return;
     }
 
-    if (!recipientId || recipientId === currentUserId) {
-      setError("Please select a valid user");
+    if (!selectedUser?._id) {
+      setError("Please verify the recipient email first");
       return;
     }
 
-    socket.emit("join_room", { recipientId }, (response) => {
-      console.log("Join room response:", response);
+    // Generate the same room ID for both users
+    const roomId = generateRoomId(
+      currentUserId,
+      selectedUser._id
+    );
 
-      if (response?.success) {
-        setSelectedUserId(recipientId);
-        setPersonalMessages([]);
-        setError("");
-      } else {
-        setError(response?.message || "Unable to join room");
+    console.log("Generated room ID:", roomId);
+
+    socket.timeout(5000).emit(
+      "join_room",
+      {
+        recipientId: selectedUser._id,
+        roomId,
+      },
+      (err, response) => {
+        if (err) {
+          setError("Server did not respond while joining room");
+          return;
+        }
+
+        console.log("Join room response:", response);
+
+        if (response?.success) {
+          setPersonalMessages([]);
+          setChatMode("personal");
+          setError("");
+          console.log("Successfully joined personal room");
+        } else {
+          setError(
+            response?.message || "Unable to join personal room"
+          );
+        }
       }
-    });
+    );
   };
 
   // Send personal message
-  const sendPersonalMessage = (recipientId, messageText) => {
+  const sendPersonalMessage = (messageText) => {
     const socket = socketRef.current;
 
     if (!socket || !socket.connected) {
       setError("Socket is not connected");
+      setSending(false);
+      return;
+    }
+
+    if (!selectedUser?._id) {
+      setError("Please select a user first");
+      setSending(false);
       return;
     }
 
     socket.timeout(5000).emit(
       "new_message",
       {
-        recipientId,
+        recipientId: selectedUser._id,
         message: messageText,
       },
       (err, response) => {
+        setSending(false);
+
         if (err) {
           setError("Personal message server timeout");
           return;
@@ -227,14 +334,14 @@ const ChatWindow = () => {
     if (!messageText || sending) return;
 
     if (chatMode === "personal") {
-      if (!selectedUserId) {
-        setError("Please select a user first");
+      if (!selectedUser?._id) {
+        setError("Please join a personal chat first");
         return;
       }
 
       setSending(true);
-      sendPersonalMessage(selectedUserId, messageText);
-      setSending(false);
+      setError("");
+      sendPersonalMessage(messageText);
       return;
     }
 
@@ -298,9 +405,15 @@ const ChatWindow = () => {
   const displayedMessages =
     chatMode === "group" ? messages : personalMessages;
 
+  // Auto-scroll to latest message
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({
+      behavior: "smooth",
+    });
+  }, [displayedMessages]);
+
   return (
     <div className="chat-container">
-
       {/* Sidebar */}
       <aside className="chat-sidebar">
         <div className="sidebar-header">
@@ -331,38 +444,40 @@ const ChatWindow = () => {
           <h4>Personal Chat</h4>
 
           <input
-            type="text"
-            placeholder="Enter recipient MongoDB ID"
-            value={selectedUserId}
-            onChange={(e) => setSelectedUserId(e.target.value)}
+            type="email"
+            placeholder="Enter recipient email"
+            value={recipientEmail}
+            onChange={(e) => setRecipientEmail(e.target.value)}
           />
 
           <button
             type="button"
-            onClick={() => {
-              const recipientId = selectedUserId;
-              setSelectedUserId("");
-              joinPersonalRoom(recipientId);
-            }}
+            onClick={verifyRecipientEmail}
+            disabled={verifying}
           >
-            Join Personal Chat
+            {verifying ? "Verifying..." : "Verify Email"}
           </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              setChatMode("personal");
-              setError("");
-            }}
-          >
-            Open Personal Chat
-          </button>
+          {selectedUser && (
+            <div style={{ marginTop: "10px" }}>
+              <p>
+                Verified user:{" "}
+                {selectedUser.name || selectedUser.email}
+              </p>
+
+              <button
+                type="button"
+                onClick={joinPersonalRoom}
+              >
+                Join Personal Chat
+              </button>
+            </div>
+          )}
         </div>
       </aside>
 
       {/* Chat section */}
       <main className="chat-main">
-
         {/* Header */}
         <header className="chat-header">
           <div className="avatar">
@@ -373,7 +488,9 @@ const ChatWindow = () => {
             <h3>
               {chatMode === "group"
                 ? "Group Chat"
-                : "Personal Chat"}
+                : selectedUser?.name ||
+                  selectedUser?.email ||
+                  "Personal Chat"}
             </h3>
 
             <span className="online-status">
@@ -399,9 +516,9 @@ const ChatWindow = () => {
           {displayedMessages.map((msg, index) => {
             const senderId = String(
               msg.sender?._id ||
-              msg.sender ||
-              msg.senderId ||
-              ""
+                msg.sender ||
+                msg.senderId ||
+                ""
             );
 
             const isMyMessage = senderId === currentUserId;
@@ -449,7 +566,7 @@ const ChatWindow = () => {
               sending ||
               !message.trim() ||
               socketStatus !== "Connected" ||
-              (chatMode === "personal" && !selectedUserId)
+              (chatMode === "personal" && !selectedUser?._id)
             }
           >
             {sending ? "Sending..." : "Send ➤"}
