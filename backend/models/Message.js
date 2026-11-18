@@ -1,28 +1,6 @@
 
 const mongoose = require("mongoose");
 
-const mediaSchema = new mongoose.Schema(
-  {
-    key: {
-      type: String,
-      required: true,
-    },
-    originalName: {
-      type: String,
-      required: true,
-    },
-    mimeType: {
-      type: String,
-      required: true,
-    },
-    size: {
-      type: Number,
-      required: true,
-    },
-  },
-  { _id: false }
-);
-
 const messageSchema = new mongoose.Schema(
   {
     sender: {
@@ -31,24 +9,38 @@ const messageSchema = new mongoose.Schema(
       required: true,
     },
 
-    type: {
+    message: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    messageType: {
       type: String,
       enum: ["text", "image", "video", "file"],
       default: "text",
     },
 
-    message: {
-      type: String,
-      trim: true,
-      required: function () {
-        return this.type === "text";
-      },
-    },
-
     media: {
-      type: mediaSchema,
-      required: function () {
-        return this.type !== "text";
+      fileName: {
+        type: String,
+        default: null,
+      },
+      fileKey: {
+        type: String,
+        default: null,
+      },
+      fileUrl: {
+        type: String,
+        default: null,
+      },
+      fileType: {
+        type: String,
+        default: null,
+      },
+      fileSize: {
+        type: Number,
+        default: null,
       },
     },
   },
