@@ -1,0 +1,58 @@
+
+const mongoose = require("mongoose");
+
+const archivedChatSchema = new mongoose.Schema(
+  {
+    _id: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+    },
+
+    sender: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+
+    message: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    messageType: {
+      type: String,
+      enum: ["text", "image", "video", "file"],
+      default: "text",
+    },
+
+    media: {
+      fileName: {
+        type: String,
+        default: null,
+      },
+      fileKey: {
+        type: String,
+        default: null,
+      },
+      fileUrl: {
+        type: String,
+        default: null,
+      },
+      fileType: {
+        type: String,
+        default: null,
+      },
+      fileSize: {
+        type: Number,
+        default: null,
+      },
+    },
+  },
+  {
+    timestamps: true,
+    collection: "archivedchats",
+  }
+);
+
+module.exports = mongoose.model("ArchivedChat", archivedChatSchema);

@@ -5,6 +5,7 @@ const cors = require("cors");
 const http = require("http");
 require("dotenv").config();
 const mediaRoutes = require("./routes/mediaRoutes");
+const startArchiveJob = require("./cron/archiveMessages");
 
 const authRoutes = require("./routes/authRoutes");
 const messageRoutes = require("./routes/messageRoutes");
@@ -35,7 +36,7 @@ const startServer = async () => {
     await mongoose.connect(process.env.MONGO_URI);
 
     console.log("MongoDB connected successfully");
-
+startArchiveJob();
     server.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
     });
